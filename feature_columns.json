@@ -1,0 +1,11 @@
+[
+    "ticket_price",
+    "days_before_event",
+    "reminder_sent",
+    "prior_attendance",
+    "cancelled",
+    "reminder_opened",
+    "event_type_cultural",
+    "event_type_hackathon",
+    "event_type_workshop"
+]
