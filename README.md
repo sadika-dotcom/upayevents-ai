@@ -1,11 +1,12 @@
 
+
 # UpayEvents Insight — AI Service
 
 > **AI-powered no-show prediction for student event organizers.**
 > Built for **AI Dev Fest 2026** · Organized by DIU CPC · Sponsored by Upay
 
 ![Status](https://img.shields.io/badge/status-working-brightgreen)
-![ROC-AUC](https://img.shields.io/badge/ROC--AUC-0.7752-blue)
+![ROC-AUC](https://img.shields.io/badge/ROC--AUC-0.7820-blue)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![FastAPI](https://img.shields.io/badge/API-FastAPI-009688)
 ![License](https://img.shields.io/badge/license-hackathon-lightgrey)
@@ -62,8 +63,8 @@ The organizer dashboard aggregates these probabilities across all registrations 
 
 - **Synthetic data generator** — 2,000 realistic event registration rows with injected behavioral patterns
 - **XGBoost classifier** — trained, evaluated, and saved with joblib
-- **ROC-AUC 0.7752** — validated on a held-out synthetic test set, above the 0.75 target
-- **FastAPI `/predict` endpoint** — returns probability, risk level, and top reasons
+- **ROC-AUC 0.7820** — validated on a held-out synthetic test set, above the 0.75 target
+- **FastAPI `/predict/forecast` endpoint** — returns probability, risk level, and top reasons
 - **Health check `/health`** — for uptime monitoring
 - **Explainable output** — every prediction includes feature-based reasons
 - **Privacy-first** — no real customer, wallet, or financial data used at any point
@@ -124,7 +125,7 @@ pip install pandas numpy scikit-learn xgboost joblib fastapi uvicorn pydantic
 python generate_data.py
 ```
 
-Output: `synthetic_data.csv` — 2,000 rows of registrations with realistic patterns.
+Output: `synthetic_data.csv` — 2,000 rows of registrations with realistic patterns. Roughly a 53 / 47 no-show / check-in split.
 
 ### 5. Train the model
 
@@ -138,22 +139,27 @@ Output:
 
 Expected terminal output:
 
-ROC-AUC: 0.7752
+```
+Dataset shape: (2000, 11)
+Number of features: 18
+ROC-AUC: 0.7820
 Top 5 Feature Importances:
-cancelled            0.379
-reminder_opened      0.321
-prior_attendance     0.140
-days_before_event    0.041
-event_type_hackathon 0.031
+is_cancelled                    0.264
+reminder_status_confirmed       0.184
+reminder_status_opened          0.143
+days_before_event_registered    0.039
+prior_attendance_count          0.036
 Model saved to model.pkl
 Feature columns saved to feature_columns.json
+```
 
-
+---
 
 ## Environment Variables
 
 **None required.** This service uses only synthetic data generated locally. No API keys, secrets, or credentials are needed.
 
+---
 
 ## Run and Build Commands
 
@@ -177,7 +183,7 @@ _Not yet deployed. This service runs locally for the hackathon demo. The organiz
 
 ## API Reference
 
-### `POST /predict`
+### `POST /predict/forecast`
 
 Predict attendance probability for a single paid registrant.
 
@@ -185,35 +191,51 @@ Predict attendance probability for a single paid registrant.
 
 ```json
 {
-  "event_type": "hackathon",
-  "ticket_price": 300,
-  "days_before_event": 12,
-  "reminder_sent": 1,
-  "reminder_opened": 0,
-  "prior_attendance": 1,
-  "cancelled": 0
+  "registration_id": "REG-001",
+  "event_id": "EVT-100",
+  "event_category": "hackathon",
+  "ticket_price_taka": 300,
+  "days_before_event_registered": 12,
+  "payment_delay_hours": 2.5,
+  "event_day_of_week": 5,
+  "event_start_hour": 18,
+  "location_type": "campus",
+  "reminder_status": "sent",
+  "prior_attendance_count": 0,
+  "is_cancelled": false
 }
 ```
 
 **Field descriptions:**
 
-| Field | Type | Allowed Values |
+| Field | Type | Notes |
 |---|---|---|
-| `event_type` | string | `hackathon`, `workshop`, `cultural` |
-| `ticket_price` | int | `0`, `100`, `300` |
-| `days_before_event` | int | `1` to `30` |
-| `reminder_sent` | int | `0` or `1` |
-| `reminder_opened` | int | `0` or `1` |
-| `prior_attendance` | int | `0` or `1` |
-| `cancelled` | int | `0` or `1` |
+| `registration_id` | string | Correlation key only — **not** used as a model feature |
+| `event_id` | string | Correlation key only — **not** used as a model feature |
+| `event_category` | string | `hackathon`, `workshop`, `cultural`, `career_fair` |
+| `ticket_price_taka` | int | `0`, `100`, `300` |
+| `days_before_event_registered` | int | `1` to `30` |
+| `payment_delay_hours` | float or null | Nullable — missing values are filled with `-1` |
+| `event_day_of_week` | int | `0` (Monday) to `6` (Sunday) |
+| `event_start_hour` | int | `8` to `22` |
+| `location_type` | string | `campus`, `city_venue`, `online` |
+| `reminder_status` | string | `not_sent`, `sent`, `opened`, `confirmed` |
+| `prior_attendance_count` | int | `0` to `10` |
+| `is_cancelled` | bool | `true` if the registration was cancelled |
 
 **Response:**
 
 ```json
 {
-  "attendance_probability": 0.7965,
-  "no_show_risk": "Low",
-  "top_reasons": ["cancelled", "reminder_opened", "prior_attendance"]
+  "registration_id": "REG-001",
+  "event_id": "EVT-100",
+  "attendance_probability": 0.5482,
+  "no_show_risk": "Medium",
+  "top_reasons": [
+    "is_cancelled",
+    "reminder_status_confirmed",
+    "reminder_status_opened"
+  ]
 }
 ```
 
@@ -243,7 +265,7 @@ Returns `{"status": "ok"}` when the service is running.
    ```
    http://127.0.0.1:8000/docs
    ```
-3. Click **`/predict`** → **Try it out**
+3. Click **`/predict/forecast`** → **Try it out**
 4. Paste the example JSON above
 5. Click **Execute**
 
@@ -275,7 +297,7 @@ Confirm the printed ROC-AUC is above 0.75.
 upayevents-ai/
 ├── generate_data.py       # Synthetic data generator (2000 rows)
 ├── train_model.py         # XGBoost training and evaluation
-├── main.py                # FastAPI service with /predict and /health
+├── main.py                # FastAPI service with /predict/forecast and /health
 ├── synthetic_data.csv     # Generated dataset (output)
 ├── model.pkl              # Trained model (output)
 ├── feature_columns.json   # Feature columns for inference alignment
@@ -305,9 +327,9 @@ upayevents-ai/
 
 | Role | Name | Responsibility |
 |---|---|---|
-| Builder | [Name] | Frontend, dashboard, integration |
-| Designer | [Name] | UI/UX, Figma, pitch deck |
-| Researcher (AI Service) | Sadika | Synthetic data, XGBoost model, FastAPI service |
+| Builder | Toufia | Frontend, dashboard, AI integration |
+| Designer | Nahin | UI/UX design, project report, video |
+| Researcher (AI Service) | Sadika | synthetic data, XGBoost model, FastAPI service |
 
 ---
 
@@ -325,5 +347,4 @@ upayevents-ai/
 
 Built for the AI Dev Fest 2026 hackathon. Code is open for review and educational purposes.
 ```
-
 
